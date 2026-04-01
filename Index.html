@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frequência Guardas-Mirins - CMC</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .card { border: none; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .logo-camara { max-height: 100px; width: auto; object-fit: contain; }
+        
+        .input-text { text-align: center; font-size: 0.85rem; transition: all 0.2s; }
+        .input-text:disabled { background-color: #e9ecef; border-color: transparent; }
+        
+        .col-check { min-width: 40px; }
+        .col-mat { min-width: 90px; }
+        .col-lotacao { min-width: 140px; }
+        .col-presenca { min-width: 120px; }
+        .col-periodo { min-width: 120px; }
+        .col-controle { min-width: 130px; }
+        
+        .form-check-input { cursor: pointer; transform: scale(1.2); }
+
+        .input-invalido {
+            border-color: #dc3545 !important;
+            background-color: #fff5f5 !important;
+            box-shadow: 0 0 0 2px rgba(220,53,69,0.15) !important;
+        }
+        .linha-invalida td {
+            background-color: #fff5f5 !important;
+        }
+
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .toast-msg {
+            padding: 14px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #fff;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+            animation: slideIn 0.3s ease;
+            max-width: 360px;
+        }
+        .toast-erro    { background-color: #dc3545; }
+        .toast-sucesso { background-color: #198754; }
+        .toast-aviso   { background-color: #fd7e14; }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(40px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+
+        #inputResponsavel {
+            background-color: #e8f0fb;
+            font-weight: 600;
+            color: #003580;
+        }
+    </style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<div class="container-fluid mt-4 mb-5 px-4">
+    <div class="card p-4 p-md-5">
+        
+        <div class="text-center border-bottom mb-4 pb-4">
+            <img id="imgLogo" src="https://i.imgur.com/eB442U3.png" alt="Logo CMC" class="logo-camara mb-3" crossorigin="anonymous">
+            
+            <h2 class="text-primary fw-bold mb-2">Formulário de Frequência</h2>
+            <div class="mb-4">
+                <span class="badge bg-primary px-4 py-2 fs-5 rounded-pill shadow-sm">Guardas-Mirins</span>
+            </div>
+            <div id="statusConexao" class="badge bg-secondary p-2">Conectando ao banco de dados...</div>
+        </div>
+
+        <div id="areaFallback" class="alert alert-warning d-none mb-4 shadow-sm">
+            <h6 class="fw-bold">⚠️ A conexão automática falhou.</h6>
+            <p class="mb-2 small">Baixe a planilha como CSV e faça o upload abaixo:</p>
+            <input type="file" id="inputArquivoCSV" accept=".csv" class="form-control form-control-sm w-50">
+        </div>
+
+        <div class="row mb-3 bg-light p-3 border rounded mx-0">
+            <div class="col-md-4">
+                <label class="form-label fw-bold">1. Selecione a Lotação:</label>
+                <input class="form-control border-primary" list="listaLotacoesDatalist" id="selectLotacao" placeholder="Pesquise a lotação..." disabled>
+                <datalist id="listaLotacoesDatalist"></datalist>
+            </div>
+            <div class="col-md-5 mt-3 mt-md-0">
+                <label class="form-label fw-bold">2. Responsável (Vereador/Diretor):</label>
+                <input class="form-control border-primary" list="listaResponsaveisDatalist" id="selectResponsavel" placeholder="Selecione a lotação primeiro..." disabled>
+                <datalist id="listaResponsaveisDatalist"></datalist>
+                <div id="hintResponsavel" class="d-none mt-1">
+                    <small class="text-warning fw-bold">⚠️ Esta lotação possui mais de um responsável. Selecione para carregar a tabela.</small>
+                </div>
+            </div>
+            <div class="col-md-3 mt-3 mt-md-0">
+                <label class="form-label fw-bold">3. Mês/Ano:</label>
+                <input type="month" id="inputMesAno" class="form-control border-primary">
+            </div>
+        </div>
+
+        <div class="row mb-4 bg-light px-3 pb-3 border rounded mx-0">
+            <div class="col-md-12 p-3 bg-white border rounded">
+                <label class="form-label fw-bold">E-mail institucional do Responsável:</label>
+                <input type="email" id="inputEmail" class="form-control border-primary" placeholder="exemplo@cmc.pr.gov.br">
+            </div>
+        </div>
+
+        <div id="areaTabela" class="d-none">
+            <div class="d-flex justify-content-between align-items-center mb-3 bg-white p-3 border rounded">
+                <h5 class="mb-0 text-secondary">Lotação: <span id="spanLotacao" class="text-primary fw-bold"></span></h5>
+                <h5 class="mb-0 text-secondary d-none">Responsável: <span id="spanResponsavel" class="text-primary fw-bold"></span></h5>
+            </div>
+            
+            <div class="table-responsive border rounded shadow-sm">
+                <table class="table table-hover align-middle bg-white mb-0 text-center">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="col-check align-middle"><input class="form-check-input border-secondary" type="checkbox" id="checkAll" checked onclick="toggleAllChecks(this)"></th>
+                            <th class="text-start col-mat">Matrícula</th>
+                            <th class="text-start">Nome do Guarda-Mirim</th>
+                            <th class="text-start col-lotacao">Lotação</th>
+                            <th class="col-periodo">Período</th>
+                            <th class="col-presenca">Presença</th>
+                            <th class="col-controle">Faltas</th>
+                            <th class="col-controle">Atestados/<br>Afastamentos*</th>
+                            <th class="col-controle">Férias</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaBody"></tbody>
+                </table>
+            </div>
+
+            <div id="areaErros" class="d-none alert alert-danger mt-3 shadow-sm">
+                <h6 class="fw-bold mb-2">⛔ Corrija os erros antes de gerar o PDF:</h6>
+                <ul id="listaErros" class="mb-0 small"></ul>
+            </div>
+
+            <div class="mt-4 border-top pt-4 text-center">
+                <h6 class="text-muted fw-bold mb-3">FINALIZAÇÃO</h6>
+                <button id="btnGerarPDF" class="btn btn-success btn-lg px-5 fw-bold shadow-sm mb-2">📄 Gerar Relatório e Salvar Dados</button>
+                <p class="small text-muted">Após clicar, o PDF será baixado e os dados salvos na planilha.</p>
+                <div class="text-start mt-4">
+                    <button id="btnLimpar" class="btn btn-outline-secondary btn-sm fw-bold">🔄 Recarregar Página</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // LINKS E CONFIGURAÇÕES
+    // ==========================================
+    
+    // 1. Link do CSV publicado na web (para ler os dados dos Guardas)
+    const LINK_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTbqmhmA9KzuqmzRJ0KBmmFd_8VzLHYb6MrfpdUIX1ZvQ1tmbG1dxM5ixc4qDqMMXHvNU2gqWwuDmuS/pub?gid=0&single=true&output=csv";
+    
+    // 2. URL DO APPS SCRIPT (COLE A URL GERADA NO PASSO 1 AQUI)
+    // AVISO: Se você mudar o script, TEM QUE GERAR NOVA VERSÃO e colar o link novo aqui.
+    const URL_APPSCRIPT_SALVAR = "https://script.google.com/macros/s/AKfycbzDBtYCyM_1xGUU8-Qljsc1uDrCXro0bx_BQ8VscOX8tJAx2OlJfJsL2BQXW2S1nkY0/exec"; // <-- SUBSTITUA AQUI SE NECESSÁRIO
+    
+    // 3. Link do Google Forms de destino (onde anexa o PDF)
+    const LINK_FORMS_ENVIO = "https://docs.google.com/forms/d/e/1FAIpQLScYMH35I5YnGv30gx2Gtvt7ZdNyn4P_ZBC6pGu_KqpUu5OWaQ/viewform?usp=header";
+
+    let baseGeral = [];
+
+    // ==========================================
+    // FUNÇÕES DE INTERFACE E NOTIFICAÇÃO
+    // ==========================================
+    function mostrarToast(mensagem, tipo = 'aviso') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast-msg toast-${tipo}`;
+        toast.textContent = mensagem;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
+
+    // ==========================================
+    // INICIALIZAÇÃO
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+        // Configura o campo Mês/Ano para o mês anterior (por padrão)
+        const data = new Date();
+        let mes = data.getMonth(); 
+        let ano = data.getFullYear();
+        if (mes === 0) { mes = 12; ano = ano - 1; }
+        document.getElementById("inputMesAno").value = `${ano}-${String(mes).padStart(2, '0')}`;
+        
+        tentaConectarPlanilha();
+    });
+
+    // Função utilitária para buscar valores ignorando acentos e maiúsculas/minúsculas
+    function buscarValorInteligente(obj, termosBusca) {
+        const chaves = Object.keys(obj);
+        for (let chave of chaves) {
+            const chaveLimpa = chave.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+            for (let termo of termosBusca) {
+                if (chaveLimpa.includes(termo)) return obj[chave] || "";
+            }
+        }
+        return "";
+    }
+
+    // ==========================================
+    // CARREGAMENTO DOS DADOS (CSV)
+    // ==========================================
+    function tentaConectarPlanilha() {
+        const status = document.getElementById("statusConexao");
+        status.className = "badge bg-info p-2";
+        status.innerHTML = "Conectando ao banco de dados...";
+        
+        Papa.parse(LINK_CSV + "&t=" + new Date().getTime(), {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                if (results.data && results.data.length > 0) {
+                    baseGeral = results.data;
+                    popularLotacoes();
+                    status.className = "badge bg-success p-2";
+                    status.innerHTML = "✓ Base carregada com sucesso";
+                    setTimeout(() => { status.style.display = 'none'; }, 3000);
+                } else {
+                    falhaConexao();
+                }
+            },
+            error: function(error) {
+                console.error("Erro no PapaParse:", error);
+                falhaConexao();
+            }
+        });
+    }
+
+    function falhaConexao() {
+        const status = document.getElementById("statusConexao");
+        status.className = "badge bg-danger p-2";
+        status.innerHTML = "⚠ Falha na conexão com a planilha";
+        document.getElementById("selectLotacao").placeholder = "Use o upload de CSV abaixo";
+        document.getElementById("areaFallback").classList.remove("d-none");
+    }
+
+    // Fallback: Permite carregar o arquivo CSV manualmente
+    document.getElementById("inputArquivoCSV").addEventListener("change", function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        Papa.parse(file, {
+            header: true, skipEmptyLines: true,
+            transformHeader: h => h.trim(),
+            complete: function(results) {
+                baseGeral = results.data;
+                popularLotacoes();
+                document.getElementById("statusConexao").className = "badge bg-success p-2";
+                document.getElementById("statusConexao").innerHTML = "✓ Base carregada do arquivo";
+                document.getElementById("areaFallback").classList.add("d-none");
+            }
+        });
+    });
+
+    // ==========================================
+    // LÓGICA DOS DROPDOWNS E TABELA
+    // ==========================================
+    function popularLotacoes() {
+        const lotacoes = [...new Set(baseGeral.map(item => buscarValorInteligente(item, ["lotacao"])))].filter(Boolean).sort();
+        const datalist = document.getElementById("listaLotacoesDatalist");
+        datalist.innerHTML = lotacoes.map(l => `<option value="${l}">`).join('');
+        
+        const selectLotacao = document.getElementById("selectLotacao");
+        selectLotacao.disabled = false;
+
+        selectLotacao.addEventListener('input', function() {
+            const val = this.value;
+            if(lotacoes.includes(val)) {
+                popularResponsaveis(val);
+            } else {
+                document.getElementById("selectResponsavel").disabled = true;
+                document.getElementById("selectResponsavel").value = "";
+                document.getElementById("areaTabela").classList.add("d-none");
+            }
+        });
+    }
+
+    function popularResponsaveis(lotacaoSelecionada) {
+        const membrosLotacao = baseGeral.filter(s => buscarValorInteligente(s, ["lotacao"]) === lotacaoSelecionada);
+        const responsaveis = [...new Set(membrosLotacao.map(s => buscarValorInteligente(s, ["responsavel", "vereador", "diretor"])))].filter(Boolean).sort();
+        
+        const datalist = document.getElementById("listaResponsaveisDatalist");
+        datalist.innerHTML = responsaveis.map(r => `<option value="${r}">`).join('');
+        
+        const selectResponsavel = document.getElementById("selectResponsavel");
+        const hintResponsavel = document.getElementById("hintResponsavel");
+        
+        selectResponsavel.disabled = false;
+        selectResponsavel.value = ""; 
+        document.getElementById("areaTabela").classList.add("d-none");
+
+        // Lida com a diferença de 1 ou múltiplos responsáveis
+        if (responsaveis.length === 1) {
+            selectResponsavel.value = responsaveis[0];
+            hintResponsavel.classList.add("d-none");
+            montarTabela(membrosLotacao, lotacaoSelecionada, responsaveis[0]);
+        } else {
+             hintResponsavel.classList.remove("d-none");
+        }
+
+        // Listener para quando o responsável é escolhido manualmente (se houver mais de um)
+        selectResponsavel.addEventListener('input', function() {
+            const val = this.value;
+            if(responsaveis.includes(val)) {
+                 const membrosResp = membrosLotacao.filter(s => buscarValorInteligente(s, ["responsavel", "vereador", "diretor"]) === val);
+                 hintResponsavel.classList.add("d-none");
+                 montarTabela(membrosResp, lotacaoSelecionada, val);
+            } else {
+                 document.getElementById("areaTabela").classList.add("d-none");
+                 if(responsaveis.length > 1) hintResponsavel.classList.remove("d-none");
+            }
+        });
+    }
+
+    function montarTabela(servidores, lotacao, responsavel) {
+        const tbody = document.getElementById("tabelaBody");
+        tbody.innerHTML = "";
+        
+        document.getElementById("spanLotacao").textContent = lotacao;
+        document.getElementById("spanResponsavel").textContent = responsavel || "N/A"; // Embora esteja oculto no HTML atual
+
+        // Define o número de dias do mês selecionado
+        const mesAno = document.getElementById("inputMesAno").value;
+        const [anoStr, mesStr] = mesAno.split('-');
+        const diasNoMes = new Date(parseInt(anoStr), parseInt(mesStr), 0).getDate();
+        const periodoSugerido = `01 a ${diasNoMes}`;
+
+        servidores.forEach((servidor, i) => {
+            const mat = buscarValorInteligente(servidor, ["matricula"]);
+            const nome = buscarValorInteligente(servidor, ["nome"]);
+            
+            // Puxa valores da planilha se existirem (para caso de edição futura)
+            const per = buscarValorInteligente(servidor, ["periodo"]) || periodoSugerido;
+            const fer = buscarValorInteligente(servidor, ["ferias"]);
+            const fal = buscarValorInteligente(servidor, ["falta"]);
+            const ate = buscarValorInteligente(servidor, ["atestado", "afastamento"]);
+            
+            const parcial = (fer.trim() !== "" || fal.trim() !== "" || ate.trim() !== "");
+
+            tbody.innerHTML += `
+                <tr id="linha-${i}">
+                    <td class="align-middle"><input class="form-check-input border-secondary check-servidor" type="checkbox" id="check-${i}" checked onclick="verificarChecksIndividuais(); limparErroDaLinha(${i})"></td>
+                    <td class="text-secondary fw-bold text-start mat-valor">${mat}</td>
+                    <td class="text-dark text-start">${nome}</td>
+                    <td class="text-muted text-start small lotacao-valor">${lotacao}</td>
+                    <td><input type="text" class="form-control form-control-sm input-text border-secondary mx-auto w-100" id="periodo-${i}" value="${per}" oninput="limparErroDaLinha(${i})"></td>
+                    <td>
+                        <select class="form-select form-select-sm border-secondary w-100" id="presenca-${i}" onchange="toggleCamposJustificativa(${i}); limparErroDaLinha(${i})">
+                            <option value="integral" ${!parcial ? "selected" : ""}>Integral</option>
+                            <option value="parcial" ${parcial ? "selected" : ""}>Parcial</option>
+                        </select>
+                    </td>
+                    <td><input type="text" class="form-control form-control-sm input-text border-secondary mx-auto w-100" id="faltas-${i}" value="${fal}" ${parcial ? '' : 'disabled'} placeholder="${parcial ? 'Dias...' : '-'}" oninput="limparErroDaLinha(${i})"></td>
+                    <td><input type="text" class="form-control form-control-sm input-text border-secondary mx-auto w-100" id="atestados-${i}" value="${ate}" ${parcial ? '' : 'disabled'} placeholder="${parcial ? 'Dias...' : '-'}" oninput="limparErroDaLinha(${i})"></td>
+                    <td><input type="text" class="form-control form-control-sm input-text border-secondary mx-auto w-100" id="ferias-${i}" value="${fer}" ${parcial ? '' : 'disabled'} placeholder="${parcial ? 'Dias...' : '-'}" oninput="limparErroDaLinha(${i})"></td>
+                </tr>
+            `;
+        });
+        document.getElementById("areaTabela").classList.remove("d-none");
+    }
+
+    // ==========================================
+    // INTERAÇÕES DA TABELA
+    // ==========================================
+    window.toggleCamposJustificativa = function(i) {
+        const p = document.getElementById(`presenca-${i}`).value === "integral";
+        [`faltas-${i}`, `atestados-${i}`, `ferias-${i}`].forEach(id => {
+            const el = document.getElementById(id);
+            el.disabled = p;
+            if(p) {
+                el.value = "";
+                el.placeholder = "-";
+            } else {
+                el.placeholder = "Dias...";
+            }
+        });
+    }
+
+    window.toggleAllChecks = (s) => document.querySelectorAll('.check-servidor').forEach(c => c.checked = s.checked);
+    
+    window.verificarChecksIndividuais = function() {
+        const checkboxes = document.querySelectorAll('.check-servidor');
+        document.getElementById("checkAll").checked = Array.from(checkboxes).every(chk => chk.checked);
+    }
+
+    window.limparErroDaLinha = function(i) {
+        const linha = document.getElementById(`linha-${i}`);
+        if (!linha) return;
+        linha.classList.remove('linha-invalida');
+        ['periodo', 'faltas', 'atestados', 'ferias'].forEach(campo => {
+            const el = document.getElementById(`${campo}-${i}`);
+            if (el) el.classList.remove('input-invalido');
+        });
+    }
+
+    // ==========================================
+    // VALIDAÇÃO E GERAÇÃO
+    // ==========================================
+    function validarFormulario() {
+        const linhas = document.querySelectorAll("#tabelaBody tr");
+        let valido = true;
+        
+        document.getElementById("areaErros").classList.add("d-none");
+        document.getElementById("listaErros").innerHTML = "";
+        document.querySelectorAll('.linha-invalida').forEach(l => l.classList.remove('linha-invalida'));
+        document.querySelectorAll('.input-invalido').forEach(el => el.classList.remove('input-invalido'));
+
+        let peloMenosUmSelecionado = false;
+        const erros = [];
+
+        linhas.forEach((tr, i) => {
+            const checkbox = document.getElementById(`check-${i}`);
+            if (!checkbox || !checkbox.checked) return;
+            
+            peloMenosUmSelecionado = true;
+
+            const nome = tr.cells[2].innerText.trim();
+            const periodo = document.getElementById(`periodo-${i}`);
+            const presenca = document.getElementById(`presenca-${i}`).value;
+            const faltas = document.getElementById(`faltas-${i}`);
+            const atestados = document.getElementById(`atestados-${i}`);
+            const ferias = document.getElementById(`ferias-${i}`);
+            const errosLinha = [];
+
+            if (!periodo.value.trim()) { 
+                periodo.classList.add('input-invalido'); 
+                errosLinha.push("campo Período está vazio"); 
+            }
+            
+            if (presenca === "parcial") {
+                if (!faltas.value.trim() && !atestados.value.trim() && !ferias.value.trim()) {
+                    faltas.classList.add('input-invalido'); 
+                    atestados.classList.add('input-invalido'); 
+                    ferias.classList.add('input-invalido');
+                    errosLinha.push("presença Parcial sem informar justificativa (Faltas, Atestados ou Férias)");
+                }
+            }
+            
+            if (errosLinha.length > 0) {
+                valido = false; 
+                tr.classList.add('linha-invalida');
+                erros.push(`<strong>${nome}</strong>: ${errosLinha.join("; ")}`);
+            }
+        });
+        
+        if (!peloMenosUmSelecionado) {
+             mostrarToast("Selecione pelo menos um membro na tabela.", "aviso");
+             return false;
+        }
+
+        if (!valido) {
+            const lista = document.getElementById("listaErros");
+            erros.forEach(e => { lista.innerHTML += `<li>${e}</li>`; });
+            document.getElementById("areaErros").classList.remove("d-none");
+            document.getElementById("areaErros").scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+
+        return valido;
+    }
+
+    document.getElementById("btnLimpar").addEventListener("click", () => location.reload());
+
+    document.getElementById("btnGerarPDF").addEventListener("click", () => {
+        const mesAno = document.getElementById("inputMesAno").value;
+        const lotacao = document.getElementById("selectLotacao").value;
+        const responsavel = document.getElementById("selectResponsavel").value; // Agora o input é um datalist
+        const email = document.getElementById("inputEmail").value.trim();
+
+        if (!mesAno) return mostrarToast("Selecione o Mês/Ano.", "aviso");
+        if (!lotacao) return mostrarToast("Selecione uma lotação.", "aviso");
+        if (!responsavel) return mostrarToast("Selecione um responsável.", "aviso");
+        if (!email || !email.toLowerCase().endsWith("@cmc.pr.gov.br")) {
+             return mostrarToast("E-mail institucional inválido. Use @cmc.pr.gov.br", "erro");
+        }
+        
+        if (!validarFormulario()) return;
+
+        const dadosPDF = [];
+        const registrosSalvar = [];
+        
+        document.querySelectorAll("#tabelaBody tr").forEach((tr, i) => {
+            if (document.getElementById(`check-${i}`).checked) {
+                const linha = [
+                    tr.querySelector('.mat-valor').innerText, 
+                    tr.cells[2].innerText, 
+                    lotacao,
+                    document.getElementById(`periodo-${i}`).value,
+                    document.getElementById(`presenca-${i}`).value.toUpperCase(),
+                    document.getElementById(`faltas-${i}`).value || "-",
+                    document.getElementById(`atestados-${i}`).value || "-",
+                    document.getElementById(`ferias-${i}`).value || "-"
+                ];
+                dadosPDF.push(linha);
+                registrosSalvar.push(linha); // Mantemos os mesmos dados para salvar no Sheets
+            }
+        });
+
+        if(dadosPDF.length === 0) return; // Já tratado na validação
+
+        const btn = document.getElementById("btnGerarPDF");
+        const textoOriginal = btn.innerHTML;
+        btn.innerHTML = "⏳ Processando Dados e Gerando PDF...";
+        btn.disabled = true;
+
+        // PREPARA O PACOTE DE DADOS
+        const pacoteDeDados = {
+            mesAno: mesAno,
+            vereador: responsavel, // O Apps Script espera 'vereador' como chave
+            email: email,
+            registros: registrosSalvar
+        };
+
+        // 1. ENVIA PARA O APPS SCRIPT USANDO GET (BURLANDO O CORS)
+        // Transformamos o JSON num formato seguro para URL
+        const parametrosDaURL = encodeURIComponent(JSON.stringify(pacoteDeDados));
+        // Montamos a URL final
+        const urlRequisicao = URL_APPSCRIPT_SALVAR + "?dados=" + parametrosDaURL;
+
+        // Fazemos a requisição silenciosa (não ligamos para a resposta)
+        fetch(urlRequisicao, { mode: "no-cors" })
+            .then(() => {
+                console.log("Dados enviados para a planilha.");
+                gerarPDF(dadosPDF, mesAno, lotacao, responsavel, email, btn, textoOriginal);
+            })
+            .catch(erro => {
+                console.error("Aviso: Falha ao comunicar com o Apps Script.", erro);
+                // Mesmo com erro de rede (ou CORS bloqueando), gera o PDF para o usuário não ficar travado
+                gerarPDF(dadosPDF, mesAno, lotacao, responsavel, email, btn, textoOriginal);
+            });
+    });
+
+    // Função dedicada para gerar o PDF
+    function gerarPDF(dadosPDF, mesAno, lotacao, responsavel, email, btn, textoOriginal) {
+        try {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const [ano, mes] = mesAno.split('-');
+            const mesesNome = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+            const nomeMes = mesesNome[parseInt(mes) - 1];
+
+            // Função para rodapé
+            function drawFooter() {
+                doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 100, 100);
+                doc.text(`Câmara Municipal de Curitiba – Frequência Guardas-Mirins – ${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}/${ano}`, 14, 287);
+            }
+
+            // Tenta inserir a logo
+            try {
+                const img = document.getElementById("imgLogo");
+                if (img && img.complete && img.naturalHeight !== 0) {
+                    const ratio = img.naturalWidth / img.naturalHeight;
+                    doc.addImage(img, 'PNG', 14, 12, 35, 35/ratio);
+                }
+            } catch(e) {
+                console.warn("Não foi possível renderizar a logo no PDF.");
+            }
+
+            doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0);
+            doc.text("FORMULÁRIO DE FREQUÊNCIA DE GUARDAS-MIRINS", 55, 20);
+            
+            doc.setFontSize(10); doc.setFont("helvetica", "normal");
+            doc.text("À", 14, 39);
+            doc.setFont("helvetica", "bold"); doc.text("Diretoria de Gestão de Pessoas (DGEP),", 14, 43);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Informamos a frequência dos Guardas-Mirins relativa ao mês de ${nomeMes} de ${ano}.`, 14, 50);
+            
+            doc.setFont("helvetica", "bold");
+            doc.text(`Lotação: ${lotacao}`, 14, 63); 
+            doc.text(`Responsável: ${responsavel}`, 14, 68);
+
+            doc.autoTable({
+                startY: 75, theme: 'grid',
+                headStyles: { fillColor: [230, 230, 230], textColor: [0,0,0], fontStyle: 'bold', halign: 'center' },
+                head: [['Matrícula', 'Nome', 'Lotação', 'Período', 'Presença', 'Faltas', 'Atestados/\nAfastamentos*', 'Férias']],
+                body: dadosPDF, styles: { fontSize: 7.5, halign: 'center', valign: 'middle' },
+                columnStyles: { 0: { halign: 'left', fontStyle: 'bold' }, 1: { halign: 'left', fontStyle: 'normal' }, 2: { halign: 'left', fontStyle: 'italic', cellWidth: 25 } },
+                margin: { bottom: 20 },
+                didDrawPage: function(data) { drawFooter(); }
+            });
+
+            let finalY = doc.lastAutoTable.finalY + 8;
+            if (finalY + 60 > 275) { doc.addPage(); finalY = 20; drawFooter(); }
+
+            // Texto específico dos guardas mirins
+            doc.setFontSize(8); doc.setFont("helvetica", "italic"); doc.setTextColor(0, 0, 0);
+            doc.text("*Em caso de afastamento por motivos de saúde superior a 3 dias, enviar o atestado à Saúde Ocupacional \npor meio de Comunicado específico do SPAE.", 14, finalY);
+
+            // Assinaturas
+            doc.setFontSize(10); doc.setFont("helvetica", "normal");
+            doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, finalY + 15);
+            doc.text("____________________________________________________", 105, finalY + 30, { align: 'center' });
+            doc.text("Assinatura do Responsável", 105, finalY + 35, { align: 'center' });
+            doc.setFont("helvetica", "bold"); doc.text(responsavel, 105, finalY + 40, { align: 'center' });
+            
+            doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 100, 100);
+            doc.text(`Gerado por: ${email}`, 105, finalY + 46, { align: 'center' });
+
+            // Salva o PDF
+            doc.save(`Frequencia_GuardaMirim_${lotacao.replace(/\s+/g, '_')}_${mes}_${ano}.pdf`);
+            
+            // --- MUDA O BOTÃO PARA O USUÁRIO ABRIR O FORMS ---
+            // Isso previne o bloqueador de pop-ups do navegador
+            btn.innerHTML = "🔗 Arquivo Baixado. Clique AQUI para Anexar no Sistema";
+            btn.classList.remove("btn-success");
+            btn.classList.add("btn-primary");
+            btn.disabled = false;
+            
+            // Remove evento de gerar PDF e adiciona o de abrir o forms
+            const novoBtn = btn.cloneNode(true);
+            btn.parentNode.replaceChild(novoBtn, btn);
+            
+            novoBtn.addEventListener("click", () => {
+                window.open(LINK_FORMS_ENVIO, "_blank");
+            });
+
+            mostrarToast("✅ Relatório gerado! Os dados estão sendo processados.", "sucesso");
+
+        } catch (erroPDF) {
+            console.error("Erro na geração do PDF:", erroPDF);
+            mostrarToast("⛔ Ocorreu um erro ao criar o arquivo PDF.", "erro");
+            btn.innerHTML = textoOriginal;
+            btn.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>
