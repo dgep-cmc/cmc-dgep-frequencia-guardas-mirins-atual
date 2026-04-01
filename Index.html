@@ -167,18 +167,34 @@
     // ==========================================
     // LINKS E CONFIGURAÇÕES
     // ==========================================
-    
-    // 1. Link do CSV publicado na web (para ler os dados dos Guardas)
     const LINK_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTbqmhmA9KzuqmzRJ0KBmmFd_8VzLHYb6MrfpdUIX1ZvQ1tmbG1dxM5ixc4qDqMMXHvNU2gqWwuDmuS/pub?gid=0&single=true&output=csv";
-    
-    // 2. URL DO APPS SCRIPT (COLE A URL GERADA NO PASSO 1 AQUI)
-    // AVISO: Se você mudar o script, TEM QUE GERAR NOVA VERSÃO e colar o link novo aqui.
-    const URL_APPSCRIPT_SALVAR = "https://script.google.com/macros/s/AKfycbzDBtYCyM_1xGUU8-Qljsc1uDrCXro0bx_BQ8VscOX8tJAx2OlJfJsL2BQXW2S1nkY0/exec"; // <-- SUBSTITUA AQUI SE NECESSÁRIO
-    
-    // 3. Link do Google Forms de destino (onde anexa o PDF)
+    const URL_APPSCRIPT_SALVAR = "https://script.google.com/macros/s/AKfycbzDBtYCyM_1xGUU8-Qljsc1uDrCXro0bx_BQ8VscOX8tJAx2OlJfJsL2BQXW2S1nkY0/exec"; 
     const LINK_FORMS_ENVIO = "https://docs.google.com/forms/d/e/1FAIpQLScYMH35I5YnGv30gx2Gtvt7ZdNyn4P_ZBC6pGu_KqpUu5OWaQ/viewform?usp=header";
 
     let baseGeral = [];
+
+    // ==========================================
+    // CONVERSOR DE IMAGEM (NOVO)
+    // ==========================================
+    // Essa função transforma o link do Imgur em formato de dados seguro para o PDF automaticamente
+    function carregarLogoParaPDF(url, callback) {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = this.naturalWidth;
+            canvas.height = this.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(this, 0, 0);
+            callback(canvas.toDataURL('image/png'));
+        };
+        img.onerror = function() {
+            console.warn("Falha ao converter a imagem dinamicamente.");
+            callback(null);
+        };
+        // Adiciona timestamp para quebrar o cache do navegador e evitar bloqueios de CORS
+        img.src = url + "?t=" + new Date().getTime();
+    }
 
     // ==========================================
     // FUNÇÕES DE INTERFACE E NOTIFICAÇÃO
@@ -192,11 +208,7 @@
         setTimeout(() => toast.remove(), 4000);
     }
 
-    // ==========================================
-    // INICIALIZAÇÃO
-    // ==========================================
     window.addEventListener('DOMContentLoaded', () => {
-        // Configura o campo Mês/Ano para o mês anterior (por padrão)
         const data = new Date();
         let mes = data.getMonth(); 
         let ano = data.getFullYear();
@@ -206,7 +218,6 @@
         tentaConectarPlanilha();
     });
 
-    // Função utilitária para buscar valores ignorando acentos e maiúsculas/minúsculas
     function buscarValorInteligente(obj, termosBusca) {
         const chaves = Object.keys(obj);
         for (let chave of chaves) {
@@ -218,18 +229,13 @@
         return "";
     }
 
-    // ==========================================
-    // CARREGAMENTO DOS DADOS (CSV)
-    // ==========================================
     function tentaConectarPlanilha() {
         const status = document.getElementById("statusConexao");
         status.className = "badge bg-info p-2";
         status.innerHTML = "Conectando ao banco de dados...";
         
         Papa.parse(LINK_CSV + "&t=" + new Date().getTime(), {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
+            download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
                 if (results.data && results.data.length > 0) {
                     baseGeral = results.data;
@@ -237,14 +243,9 @@
                     status.className = "badge bg-success p-2";
                     status.innerHTML = "✓ Base carregada com sucesso";
                     setTimeout(() => { status.style.display = 'none'; }, 3000);
-                } else {
-                    falhaConexao();
-                }
+                } else { falhaConexao(); }
             },
-            error: function(error) {
-                console.error("Erro no PapaParse:", error);
-                falhaConexao();
-            }
+            error: function(error) { console.error(error); falhaConexao(); }
         });
     }
 
@@ -256,13 +257,11 @@
         document.getElementById("areaFallback").classList.remove("d-none");
     }
 
-    // Fallback: Permite carregar o arquivo CSV manualmente
     document.getElementById("inputArquivoCSV").addEventListener("change", function(e) {
         const file = e.target.files[0];
         if (!file) return;
         Papa.parse(file, {
-            header: true, skipEmptyLines: true,
-            transformHeader: h => h.trim(),
+            header: true, skipEmptyLines: true, transformHeader: h => h.trim(),
             complete: function(results) {
                 baseGeral = results.data;
                 popularLotacoes();
@@ -273,9 +272,6 @@
         });
     });
 
-    // ==========================================
-    // LÓGICA DOS DROPDOWNS E TABELA
-    // ==========================================
     function popularLotacoes() {
         const lotacoes = [...new Set(baseGeral.map(item => buscarValorInteligente(item, ["lotacao"])))].filter(Boolean).sort();
         const datalist = document.getElementById("listaLotacoesDatalist");
@@ -285,9 +281,8 @@
         selectLotacao.disabled = false;
 
         selectLotacao.addEventListener('input', function() {
-            const val = this.value;
-            if(lotacoes.includes(val)) {
-                popularResponsaveis(val);
+            if(lotacoes.includes(this.value)) {
+                popularResponsaveis(this.value);
             } else {
                 document.getElementById("selectResponsavel").disabled = true;
                 document.getElementById("selectResponsavel").value = "";
@@ -310,7 +305,6 @@
         selectResponsavel.value = ""; 
         document.getElementById("areaTabela").classList.add("d-none");
 
-        // Lida com a diferença de 1 ou múltiplos responsáveis
         if (responsaveis.length === 1) {
             selectResponsavel.value = responsaveis[0];
             hintResponsavel.classList.add("d-none");
@@ -319,13 +313,11 @@
              hintResponsavel.classList.remove("d-none");
         }
 
-        // Listener para quando o responsável é escolhido manualmente (se houver mais de um)
         selectResponsavel.addEventListener('input', function() {
-            const val = this.value;
-            if(responsaveis.includes(val)) {
-                 const membrosResp = membrosLotacao.filter(s => buscarValorInteligente(s, ["responsavel", "vereador", "diretor"]) === val);
+            if(responsaveis.includes(this.value)) {
+                 const membrosResp = membrosLotacao.filter(s => buscarValorInteligente(s, ["responsavel", "vereador", "diretor"]) === this.value);
                  hintResponsavel.classList.add("d-none");
-                 montarTabela(membrosResp, lotacaoSelecionada, val);
+                 montarTabela(membrosResp, lotacaoSelecionada, this.value);
             } else {
                  document.getElementById("areaTabela").classList.add("d-none");
                  if(responsaveis.length > 1) hintResponsavel.classList.remove("d-none");
@@ -338,9 +330,8 @@
         tbody.innerHTML = "";
         
         document.getElementById("spanLotacao").textContent = lotacao;
-        document.getElementById("spanResponsavel").textContent = responsavel || "N/A"; // Embora esteja oculto no HTML atual
+        document.getElementById("spanResponsavel").textContent = responsavel || "N/A";
 
-        // Define o número de dias do mês selecionado
         const mesAno = document.getElementById("inputMesAno").value;
         const [anoStr, mesStr] = mesAno.split('-');
         const diasNoMes = new Date(parseInt(anoStr), parseInt(mesStr), 0).getDate();
@@ -349,8 +340,6 @@
         servidores.forEach((servidor, i) => {
             const mat = buscarValorInteligente(servidor, ["matricula"]);
             const nome = buscarValorInteligente(servidor, ["nome"]);
-            
-            // Puxa valores da planilha se existirem (para caso de edição futura)
             const per = buscarValorInteligente(servidor, ["periodo"]) || periodoSugerido;
             const fer = buscarValorInteligente(servidor, ["ferias"]);
             const fal = buscarValorInteligente(servidor, ["falta"]);
@@ -380,30 +369,20 @@
         document.getElementById("areaTabela").classList.remove("d-none");
     }
 
-    // ==========================================
-    // INTERAÇÕES DA TABELA
-    // ==========================================
     window.toggleCamposJustificativa = function(i) {
         const p = document.getElementById(`presenca-${i}`).value === "integral";
         [`faltas-${i}`, `atestados-${i}`, `ferias-${i}`].forEach(id => {
             const el = document.getElementById(id);
             el.disabled = p;
-            if(p) {
-                el.value = "";
-                el.placeholder = "-";
-            } else {
-                el.placeholder = "Dias...";
-            }
+            if(p) { el.value = ""; el.placeholder = "-"; } else { el.placeholder = "Dias..."; }
         });
     }
 
     window.toggleAllChecks = (s) => document.querySelectorAll('.check-servidor').forEach(c => c.checked = s.checked);
-    
     window.verificarChecksIndividuais = function() {
         const checkboxes = document.querySelectorAll('.check-servidor');
         document.getElementById("checkAll").checked = Array.from(checkboxes).every(chk => chk.checked);
     }
-
     window.limparErroDaLinha = function(i) {
         const linha = document.getElementById(`linha-${i}`);
         if (!linha) return;
@@ -414,13 +393,9 @@
         });
     }
 
-    // ==========================================
-    // VALIDAÇÃO E GERAÇÃO
-    // ==========================================
     function validarFormulario() {
         const linhas = document.querySelectorAll("#tabelaBody tr");
         let valido = true;
-        
         document.getElementById("areaErros").classList.add("d-none");
         document.getElementById("listaErros").innerHTML = "";
         document.querySelectorAll('.linha-invalida').forEach(l => l.classList.remove('linha-invalida'));
@@ -434,7 +409,6 @@
             if (!checkbox || !checkbox.checked) return;
             
             peloMenosUmSelecionado = true;
-
             const nome = tr.cells[2].innerText.trim();
             const periodo = document.getElementById(`periodo-${i}`);
             const presenca = document.getElementById(`presenca-${i}`).value;
@@ -443,39 +417,26 @@
             const ferias = document.getElementById(`ferias-${i}`);
             const errosLinha = [];
 
-            if (!periodo.value.trim()) { 
-                periodo.classList.add('input-invalido'); 
-                errosLinha.push("campo Período está vazio"); 
-            }
-            
+            if (!periodo.value.trim()) { periodo.classList.add('input-invalido'); errosLinha.push("campo Período está vazio"); }
             if (presenca === "parcial") {
                 if (!faltas.value.trim() && !atestados.value.trim() && !ferias.value.trim()) {
-                    faltas.classList.add('input-invalido'); 
-                    atestados.classList.add('input-invalido'); 
-                    ferias.classList.add('input-invalido');
-                    errosLinha.push("presença Parcial sem informar justificativa (Faltas, Atestados ou Férias)");
+                    faltas.classList.add('input-invalido'); atestados.classList.add('input-invalido'); ferias.classList.add('input-invalido');
+                    errosLinha.push("presença Parcial sem justificar");
                 }
             }
-            
             if (errosLinha.length > 0) {
-                valido = false; 
-                tr.classList.add('linha-invalida');
+                valido = false; tr.classList.add('linha-invalida');
                 erros.push(`<strong>${nome}</strong>: ${errosLinha.join("; ")}`);
             }
         });
         
-        if (!peloMenosUmSelecionado) {
-             mostrarToast("Selecione pelo menos um membro na tabela.", "aviso");
-             return false;
-        }
-
+        if (!peloMenosUmSelecionado) { mostrarToast("Selecione pelo menos um membro.", "aviso"); return false; }
         if (!valido) {
             const lista = document.getElementById("listaErros");
             erros.forEach(e => { lista.innerHTML += `<li>${e}</li>`; });
             document.getElementById("areaErros").classList.remove("d-none");
             document.getElementById("areaErros").scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-
         return valido;
     }
 
@@ -484,16 +445,13 @@
     document.getElementById("btnGerarPDF").addEventListener("click", () => {
         const mesAno = document.getElementById("inputMesAno").value;
         const lotacao = document.getElementById("selectLotacao").value;
-        const responsavel = document.getElementById("selectResponsavel").value; // Agora o input é um datalist
+        const responsavel = document.getElementById("selectResponsavel").value;
         const email = document.getElementById("inputEmail").value.trim();
 
         if (!mesAno) return mostrarToast("Selecione o Mês/Ano.", "aviso");
         if (!lotacao) return mostrarToast("Selecione uma lotação.", "aviso");
         if (!responsavel) return mostrarToast("Selecione um responsável.", "aviso");
-        if (!email || !email.toLowerCase().endsWith("@cmc.pr.gov.br")) {
-             return mostrarToast("E-mail institucional inválido. Use @cmc.pr.gov.br", "erro");
-        }
-        
+        if (!email || !email.toLowerCase().endsWith("@cmc.pr.gov.br")) return mostrarToast("E-mail inválido. Use @cmc.pr.gov.br", "erro");
         if (!validarFormulario()) return;
 
         const dadosPDF = [];
@@ -502,56 +460,47 @@
         document.querySelectorAll("#tabelaBody tr").forEach((tr, i) => {
             if (document.getElementById(`check-${i}`).checked) {
                 const linha = [
-                    tr.querySelector('.mat-valor').innerText, 
-                    tr.cells[2].innerText, 
-                    lotacao,
+                    tr.querySelector('.mat-valor').innerText, tr.cells[2].innerText, lotacao,
                     document.getElementById(`periodo-${i}`).value,
                     document.getElementById(`presenca-${i}`).value.toUpperCase(),
                     document.getElementById(`faltas-${i}`).value || "-",
                     document.getElementById(`atestados-${i}`).value || "-",
                     document.getElementById(`ferias-${i}`).value || "-"
                 ];
-                dadosPDF.push(linha);
-                registrosSalvar.push(linha); // Mantemos os mesmos dados para salvar no Sheets
+                dadosPDF.push(linha); registrosSalvar.push(linha);
             }
         });
 
-        if(dadosPDF.length === 0) return; // Já tratado na validação
+        if(dadosPDF.length === 0) return;
 
         const btn = document.getElementById("btnGerarPDF");
         const textoOriginal = btn.innerHTML;
         btn.innerHTML = "⏳ Processando Dados e Gerando PDF...";
         btn.disabled = true;
 
-        // PREPARA O PACOTE DE DADOS
-        const pacoteDeDados = {
-            mesAno: mesAno,
-            vereador: responsavel, // O Apps Script espera 'vereador' como chave
-            email: email,
-            registros: registrosSalvar
-        };
-
-        // 1. ENVIA PARA O APPS SCRIPT USANDO GET (BURLANDO O CORS)
-        // Transformamos o JSON num formato seguro para URL
+        const pacoteDeDados = { mesAno: mesAno, vereador: responsavel, email: email, registros: registrosSalvar };
         const parametrosDaURL = encodeURIComponent(JSON.stringify(pacoteDeDados));
-        // Montamos a URL final
         const urlRequisicao = URL_APPSCRIPT_SALVAR + "?dados=" + parametrosDaURL;
 
-        // Fazemos a requisição silenciosa (não ligamos para a resposta)
-        fetch(urlRequisicao, { mode: "no-cors" })
-            .then(() => {
-                console.log("Dados enviados para a planilha.");
-                gerarPDF(dadosPDF, mesAno, lotacao, responsavel, email, btn, textoOriginal);
-            })
-            .catch(erro => {
-                console.error("Aviso: Falha ao comunicar com o Apps Script.", erro);
-                // Mesmo com erro de rede (ou CORS bloqueando), gera o PDF para o usuário não ficar travado
-                gerarPDF(dadosPDF, mesAno, lotacao, responsavel, email, btn, textoOriginal);
-            });
+        // Pega a URL exata do elemento da página
+        const urlLogoImagem = document.getElementById("imgLogo").src;
+
+        // Primeiro: Executa a função que lê a imagem, depois gera o PDF
+        carregarLogoParaPDF(urlLogoImagem, function(logoFormatada) {
+            
+            fetch(urlRequisicao, { mode: "no-cors" })
+                .then(() => {
+                    console.log("Dados enviados.");
+                    gerarPDF(dadosPDF, mesAno, lotacao, responsavel, email, btn, textoOriginal, logoFormatada);
+                })
+                .catch(erro => {
+                    console.error("Falha ao salvar no Sheets.", erro);
+                    gerarPDF(dadosPDF, mesAno, lotacao, responsavel, email, btn, textoOriginal, logoFormatada);
+                });
+        });
     });
 
-    // Função dedicada para gerar o PDF
-    function gerarPDF(dadosPDF, mesAno, lotacao, responsavel, email, btn, textoOriginal) {
+    function gerarPDF(dadosPDF, mesAno, lotacao, responsavel, email, btn, textoOriginal, logoFormatada) {
         try {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
@@ -559,21 +508,15 @@
             const mesesNome = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
             const nomeMes = mesesNome[parseInt(mes) - 1];
 
-            // Função para rodapé
             function drawFooter() {
                 doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 100, 100);
                 doc.text(`Câmara Municipal de Curitiba – Frequência Guardas-Mirins – ${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}/${ano}`, 14, 287);
             }
 
-            // Tenta inserir a logo
-            try {
-                const img = document.getElementById("imgLogo");
-                if (img && img.complete && img.naturalHeight !== 0) {
-                    const ratio = img.naturalWidth / img.naturalHeight;
-                    doc.addImage(img, 'PNG', 14, 12, 35, 35/ratio);
-                }
-            } catch(e) {
-                console.warn("Não foi possível renderizar a logo no PDF.");
+            // Insere a logo já no formato seguro processado pela nossa nova função
+            if (logoFormatada) {
+                // doc.addImage(Base64, Formato, X, Y, Largura, Altura)
+                doc.addImage(logoFormatada, 'PNG', 14, 12, 35, 12); 
             }
 
             doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(0, 0, 0);
@@ -602,11 +545,9 @@
             let finalY = doc.lastAutoTable.finalY + 8;
             if (finalY + 60 > 275) { doc.addPage(); finalY = 20; drawFooter(); }
 
-            // Texto específico dos guardas mirins
             doc.setFontSize(8); doc.setFont("helvetica", "italic"); doc.setTextColor(0, 0, 0);
             doc.text("*Em caso de afastamento por motivos de saúde superior a 3 dias, enviar o atestado à Saúde Ocupacional \npor meio de Comunicado específico do SPAE.", 14, finalY);
 
-            // Assinaturas
             doc.setFontSize(10); doc.setFont("helvetica", "normal");
             doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 14, finalY + 15);
             doc.text("____________________________________________________", 105, finalY + 30, { align: 'center' });
@@ -616,17 +557,13 @@
             doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(100, 100, 100);
             doc.text(`Gerado por: ${email}`, 105, finalY + 46, { align: 'center' });
 
-            // Salva o PDF
             doc.save(`Frequencia_GuardaMirim_${lotacao.replace(/\s+/g, '_')}_${mes}_${ano}.pdf`);
             
-            // --- MUDA O BOTÃO PARA O USUÁRIO ABRIR O FORMS ---
-            // Isso previne o bloqueador de pop-ups do navegador
             btn.innerHTML = "🔗 Arquivo Baixado. Clique AQUI para Anexar no Sistema";
             btn.classList.remove("btn-success");
             btn.classList.add("btn-primary");
             btn.disabled = false;
             
-            // Remove evento de gerar PDF e adiciona o de abrir o forms
             const novoBtn = btn.cloneNode(true);
             btn.parentNode.replaceChild(novoBtn, btn);
             
