@@ -73,7 +73,8 @@
     <div class="card p-4 p-md-5">
         
         <div class="text-center border-bottom mb-4 pb-4">
-            <img id="imgLogo" src="https://i.imgur.com/eB442U3.png" alt="Logo CMC" class="logo-camara mb-3" crossorigin="anonymous">
+            <img id="imgLogo" src="logo_cmc.png" alt="Logo CMC" class="logo-camara mb-3" onerror="this.style.display='none';">
+            
             <h2 class="text-primary fw-bold mb-2">Formulário de Frequência</h2>
             <div class="mb-4">
                 <span class="badge bg-primary px-4 py-2 fs-5 rounded-pill shadow-sm">Guardas-Mirins</span>
@@ -161,36 +162,12 @@
 </div>
 
 <script>
-    // ==========================================
-    // LINKS E CONFIGURAÇÕES - GUARDAS-MIRINS
-    // ==========================================
     const LINK_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTbqmhmA9KzuqmzRJ0KBmmFd_8VzLHYb6MrfpdUIX1ZvQ1tmbG1dxM5ixc4qDqMMXHvNU2gqWwuDmuS/pub?gid=0&single=true&output=csv";
     const URL_APPSCRIPT_SALVAR = "https://script.google.com/macros/s/AKfycbzDBtYCyM_1xGUU8-Qljsc1uDrCXro0bx_BQ8VscOX8tJAx2OlJfJsL2BQXW2S1nkY0/exec";
     const LINK_FORMS_ENVIO = "https://docs.google.com/forms/d/e/1FAIpQLScYMH35I5YnGv30gx2Gtvt7ZdNyn4P_ZBC6pGu_KqpUu5OWaQ/viewform?usp=header";
 
     let baseGeral = [];
 
-    // ==========================================
-    // CONVERSOR DE LOGO (FIM DOS ERROS NO PDF)
-    // ==========================================
-    function carregarLogoParaPDF(url, callback) {
-        const img = new Image();
-        img.crossOrigin = 'Anonymous';
-        img.onload = function() {
-            const canvas = document.createElement('canvas');
-            canvas.width = this.naturalWidth;
-            canvas.height = this.naturalHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(this, 0, 0);
-            callback(canvas.toDataURL('image/png'));
-        };
-        img.onerror = function() { callback(null); };
-        img.src = url + "?t=" + new Date().getTime(); // Evita bloqueio de cache
-    }
-
-    // ==========================================
-    // UTILITÁRIOS E INIT
-    // ==========================================
     function mostrarToast(mensagem, tipo = 'aviso') {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
@@ -220,9 +197,6 @@
         return "";
     }
 
-    // ==========================================
-    // CONEXÃO COM A PLANILHA
-    // ==========================================
     function tentaConectarPlanilha() {
         const status = document.getElementById("statusConexao");
         status.className = "badge bg-info p-2";
@@ -267,9 +241,6 @@
         });
     });
 
-    // ==========================================
-    // LÓGICA DE SELEÇÃO DUPLA (LOTAÇÃO -> RESPONSÁVEL)
-    // ==========================================
     function popularLotacoes() {
         const lotacoes = [...new Set(baseGeral.map(item => buscarValorInteligente(item, ["lotacao"])))].filter(Boolean).sort();
         const datalist = document.getElementById("listaLotacoesDatalist");
@@ -324,9 +295,6 @@
         });
     }
 
-    // ==========================================
-    // RENDERIZAÇÃO DA TABELA
-    // ==========================================
     function montarTabela(servidores, lotacao, responsavel) {
         const tbody = document.getElementById("tabelaBody");
         tbody.innerHTML = "";
@@ -382,9 +350,6 @@
         document.getElementById("areaTabela").classList.remove("d-none");
     }
 
-    // ==========================================
-    // INTERAÇÕES DA TABELA
-    // ==========================================
     window.toggleAllChecks = function(source) {
         document.querySelectorAll('.check-servidor').forEach(chk => chk.checked = source.checked);
     }
@@ -429,9 +394,6 @@
         });
     }
 
-    // ==========================================
-    // VALIDAÇÃO E GERAÇÃO
-    // ==========================================
     function validarFormulario() {
         const linhas = document.querySelectorAll("#tabelaBody tr");
         const erros = [];
@@ -538,24 +500,18 @@
         btn.innerHTML = "⏳ Processando Dados e Gerando PDF...";
         btn.disabled = true;
 
-        const urlLogoImagem = document.getElementById("imgLogo").src;
+        const pacoteDeDados = { mesAno, vereador: responsavel, registros: registrosParaSalvar };
 
-        // Dispara a conversão da logo e então segue o fluxo
-        carregarLogoParaPDF(urlLogoImagem, function(logoFormatada) {
-            
-            const pacoteDeDados = { mesAno, vereador: responsavel, registros: registrosParaSalvar };
+        fetch(URL_APPSCRIPT_SALVAR, {
+            method: "POST", mode: "no-cors",
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify(pacoteDeDados)
+        }).catch(erro => console.error("Erro ao salvar no Sheets:", erro));
 
-            fetch(URL_APPSCRIPT_SALVAR, {
-                method: "POST", mode: "no-cors",
-                headers: { "Content-Type": "text/plain" },
-                body: JSON.stringify(pacoteDeDados)
-            }).catch(erro => console.error("Erro ao salvar no Sheets:", erro));
-
-            gerarPDF(dadosPDF, mesAno, lotacao, responsavel, emailResponsavel, btn, textoOriginal, logoFormatada, dataAgora);
-        });
+        gerarPDF(dadosPDF, mesAno, lotacao, responsavel, emailResponsavel, btn, textoOriginal, dataAgora);
     });
 
-    function gerarPDF(dadosPDF, mesAno, lotacao, responsavel, emailResponsavel, btn, textoOriginal, logoFormatada, dataAgora) {
+    function gerarPDF(dadosPDF, mesAno, lotacao, responsavel, emailResponsavel, btn, textoOriginal, dataAgora) {
         try {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
@@ -568,10 +524,19 @@
                 doc.text(`Câmara Municipal de Curitiba – Frequência Guardas-Mirins – ${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}/${ano}`, 14, 287);
             }
 
+            // ===============================================
+            // INSERÇÃO DIRETA DA LOGO DO REPOSITÓRIO NO PDF
+            // ===============================================
             let logoWidth = 35, logoHeight = 15;
-            if (logoFormatada) {
-                // Se a conversão dinâmica funcionou, injeta a imagem Base64
-                doc.addImage(logoFormatada, 'PNG', 14, 12, logoWidth, logoHeight);
+            try {
+                const img = document.getElementById("imgLogo");
+                if (img.complete && img.naturalHeight !== 0) {
+                    const ratio = img.naturalWidth / img.naturalHeight;
+                    logoHeight = logoWidth / ratio;
+                    doc.addImage(img, 'PNG', 14, 12, logoWidth, logoHeight);
+                }
+            } catch(e) {
+                console.warn("A imagem não pôde ser inserida no PDF. Certifique-se de que ela está na mesma pasta no GitHub.", e);
             }
 
             const posXBarra = 14 + logoWidth + 5;
