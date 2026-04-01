@@ -484,9 +484,16 @@
                 const atestados = document.getElementById(`atestados-${i}`).value || "-";
                 const ferias = document.getElementById(`ferias-${i}`).value || "-";
                 
+               // Formato exato (8 colunas) que a aba "Respostas Guardas" espera receber
                 registrosParaSalvar.push([
-                    dataReg, mesAno, responsavel, mat, nome, lotacaoDaLinha, 
-                    periodo, presenca, faltas, atestados, ferias, emailResponsavel
+                    mat, 
+                    nome, 
+                    lotacaoDaLinha, 
+                    periodo, 
+                    presenca, 
+                    faltas, 
+                    atestados, 
+                    ferias
                 ]);
                 
                 dadosPDF.push([mat, nome, lotacaoDaLinha, periodo, presenca, faltas, atestados, ferias]);
