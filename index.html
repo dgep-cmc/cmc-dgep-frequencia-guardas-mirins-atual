@@ -500,13 +500,21 @@
         btn.innerHTML = "⏳ Processando Dados e Gerando PDF...";
         btn.disabled = true;
 
-        const pacoteDeDados = { mesAno, vereador: responsavel, registros: registrosParaSalvar };
+       // PREPARA O PACOTE DE DADOS NO FORMATO EXATO QUE SEU SCRIPT ESPERA
+        const pacoteDeDados = { 
+            mesAno: mesAno, 
+            vereador: responsavel, 
+            email: emailResponsavel, 
+            registros: registrosParaSalvar 
+        };
 
-        fetch(URL_APPSCRIPT_SALVAR, {
-            method: "POST", mode: "no-cors",
-            headers: { "Content-Type": "text/plain" },
-            body: JSON.stringify(pacoteDeDados)
-        }).catch(erro => console.error("Erro ao salvar no Sheets:", erro));
+        // ENVIA PARA O APPS SCRIPT USANDO GET (COMO ERA NO SEU CÓDIGO ORIGINAL)
+        const parametrosDaURL = encodeURIComponent(JSON.stringify(pacoteDeDados));
+        const urlRequisicao = URL_APPSCRIPT_SALVAR + "?dados=" + parametrosDaURL;
+
+        fetch(urlRequisicao, { mode: "no-cors" })
+            .then(() => console.log("Comando de salvamento enviado com sucesso!"))
+            .catch(erro => console.error("Erro ao salvar no Sheets:", erro));
 
         gerarPDF(dadosPDF, mesAno, lotacao, responsavel, emailResponsavel, btn, textoOriginal, dataAgora);
     });
