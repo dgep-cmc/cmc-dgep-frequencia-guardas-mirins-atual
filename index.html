@@ -162,8 +162,14 @@
 </div>
 
 <script>
+    // ==========================================
+    // LINKS E CONFIGURAÇÕES - GUARDAS-MIRINS
+    // ==========================================
     const LINK_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vTbqmhmA9KzuqmzRJ0KBmmFd_8VzLHYb6MrfpdUIX1ZvQ1tmbG1dxM5ixc4qDqMMXHvNU2gqWwuDmuS/pub?gid=0&single=true&output=csv";
-    const URL_APPSCRIPT_SALVAR = "https://script.google.com/macros/s/AKfycbzDBtYCyM_1xGUU8-Qljsc1uDrCXro0bx_BQ8VscOX8tJAx2OlJfJsL2BQXW2S1nkY0/exec";
+    
+    // Link NOVO do Apps Script atualizado na última conversa
+    const URL_APPSCRIPT_SALVAR = "https://script.google.com/macros/s/AKfycbwvzugNdwE3LhRXYn27JuWYKCyZJeLFZ7MkEMHkjra5MzX1ENfQ_aIIwhzmEnSDEyiI/exec";
+    
     const LINK_FORMS_ENVIO = "https://docs.google.com/forms/d/e/1FAIpQLScYMH35I5YnGv30gx2Gtvt7ZdNyn4P_ZBC6pGu_KqpUu5OWaQ/viewform?usp=header";
 
     let baseGeral = [];
@@ -471,7 +477,6 @@
         const registrosParaSalvar = [];
         const dadosPDF = [];
         const dataAgora = new Date();
-        const dataReg = dataAgora.toLocaleDateString('pt-BR') + ' ' + dataAgora.toLocaleTimeString('pt-BR');
 
         document.querySelectorAll("#tabelaBody tr").forEach((tr, i) => {
             if (document.getElementById(`check-${i}`).checked) {
@@ -484,7 +489,7 @@
                 const atestados = document.getElementById(`atestados-${i}`).value || "-";
                 const ferias = document.getElementById(`ferias-${i}`).value || "-";
                 
-               // Formato exato (8 colunas) que a aba "Respostas Guardas" espera receber
+                // Agora o pacote individual tem as 8 colunas exatas que a aba Guardas espera
                 registrosParaSalvar.push([
                     mat, 
                     nome, 
@@ -507,21 +512,21 @@
         btn.innerHTML = "⏳ Processando Dados e Gerando PDF...";
         btn.disabled = true;
 
-       // PREPARA O PACOTE DE DADOS NO FORMATO EXATO QUE SEU SCRIPT ESPERA
+        // Monta o pacote de dados organizadinho para enviar por POST
         const pacoteDeDados = { 
             mesAno: mesAno, 
             vereador: responsavel, 
-            email: emailResponsavel, 
+            email: emailResponsavel,
             registros: registrosParaSalvar 
         };
 
-        // ENVIA PARA O APPS SCRIPT USANDO GET (COMO ERA NO SEU CÓDIGO ORIGINAL)
-        const parametrosDaURL = encodeURIComponent(JSON.stringify(pacoteDeDados));
-        const urlRequisicao = URL_APPSCRIPT_SALVAR + "?dados=" + parametrosDaURL;
-
-        fetch(urlRequisicao, { mode: "no-cors" })
-            .then(() => console.log("Comando de salvamento enviado com sucesso!"))
-            .catch(erro => console.error("Erro ao salvar no Sheets:", erro));
+        // Envia os dados por método POST pro seu script no Google!
+        fetch(URL_APPSCRIPT_SALVAR, {
+            method: "POST", 
+            mode: "no-cors",
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify(pacoteDeDados)
+        }).catch(erro => console.error("Erro ao salvar no Sheets:", erro));
 
         gerarPDF(dadosPDF, mesAno, lotacao, responsavel, emailResponsavel, btn, textoOriginal, dataAgora);
     });
@@ -539,9 +544,6 @@
                 doc.text(`Câmara Municipal de Curitiba – Frequência Guardas-Mirins – ${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}/${ano}`, 14, 287);
             }
 
-            // ===============================================
-            // INSERÇÃO DIRETA DA LOGO DO REPOSITÓRIO NO PDF
-            // ===============================================
             let logoWidth = 35, logoHeight = 15;
             try {
                 const img = document.getElementById("imgLogo");
